@@ -13,27 +13,31 @@ public class BoatBuoyancy : MonoBehaviour
     public float buoyancyForce = 15f;
     public float waterDrag = 0.5f;
     public float waterAngularDrag = 1.5f;
+    public float waterLevel = 0.0f;
 
-    // Wave parameters from Water Material
-    private float waveSpeed;
-    private float waveFrequency;
-    private float waveDistance;
+    [Header("Wave Settings (If no Material, use these)")]
+    [SerializeField] private float waveSpeed = 0.2f;
+    [SerializeField] private float waveFrequency = 0.1f;
+    [SerializeField] private float waveDistance = 0.1f;
 
-    [SerializeField]
-    float waterLevel = 0.0f;
-
-    void Start()
+    private void Start()
     {
         if (rb == null) rb = GetComponent<Rigidbody>();
-        if (waterMaterial == null) Debug.LogError("🚨 Water Material을 넣어주세요.");
 
-        // Material에서 파도 정보 가져오기
-        waveSpeed = waterMaterial.GetFloat("_WaveSpeed");
-        waveFrequency = waterMaterial.GetFloat("_WaveFrequency");
-        waveDistance = waterMaterial.GetFloat("_WaveDist");
+        // Material 값이 있으면 Material 값으로 덮어쓰기
+        if (waterMaterial != null)
+        {
+            waveSpeed = waterMaterial.GetFloat("_WaveSpeed");
+            waveFrequency = waterMaterial.GetFloat("_WaveFrequency");
+            waveDistance = waterMaterial.GetFloat("_WaveDist");
+        }
+        else
+        {
+            Debug.LogWarning("⚠️ Water Material이 비어있어서, Inspector의 Wave 값 사용함");
+        }
     }
 
-    void FixedUpdate()
+    private void FixedUpdate()
     {
         foreach (var point in floatPoints)
         {
@@ -41,7 +45,7 @@ public class BoatBuoyancy : MonoBehaviour
         }
     }
 
-    void ApplyBuoyancy(Transform point)
+    private void ApplyBuoyancy(Transform point)
     {
         Vector3 worldPoint = point.position;
         float waveY = GetWaveHeight(worldPoint.x, worldPoint.z, Time.time) + waterLevel;
@@ -52,15 +56,14 @@ public class BoatBuoyancy : MonoBehaviour
             Vector3 uplift = Vector3.up * buoyancyForce * depth;
             rb.AddForceAtPosition(uplift, worldPoint);
 
-            // 물 저항
             rb.AddForce(-rb.velocity * waterDrag * Time.fixedDeltaTime);
             rb.AddTorque(-rb.angularVelocity * waterAngularDrag * Time.fixedDeltaTime);
         }
     }
 
-    float GetWaveHeight(float x, float z, float time)
+    private float GetWaveHeight(float x, float z, float time)
     {
-        // Wave 시뮬레이션 (Water Material과 동기화)
+        // 잔물결용 파도 계산
         float wave = Mathf.Sin((x + time * waveSpeed) * waveFrequency) * waveDistance * 0.1f
                    + Mathf.Sin((z + time * waveSpeed * 1.3f) * (waveFrequency * 0.8f)) * waveDistance * 0.07f;
         return wave;
