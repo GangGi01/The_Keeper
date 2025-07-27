@@ -22,7 +22,7 @@ public class VRCameraFollower : MonoBehaviour
 
             // 회전: Yaw만 따라가되 부드럽게
             Quaternion currentRotation = vrRig.rotation;
-            Quaternion targetRotation = Quaternion.Euler(0, anchor.eulerAngles.y + 180f, 0);
+            Quaternion targetRotation = Quaternion.Euler(0, anchor.eulerAngles.y, 0);
 
             vrRig.rotation = Quaternion.Slerp(
                 currentRotation,
