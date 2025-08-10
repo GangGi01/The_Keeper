@@ -15,7 +15,7 @@ RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 9
   m_Fog: 0
-  m_FogColor: {r: 0.46226418, g: 0.45572272, b: 0.45572272, a: 1}
+  m_FogColor: {r: 0.19215687, g: 0.19215687, b: 0.19215687, a: 1}
   m_FogMode: 2
   m_FogDensity: 0.2
   m_LinearFogStart: 10.93
@@ -5751,10 +5751,10 @@ MonoBehaviour:
   lightingEnd: 0.85
   fogDensityStart: 0
   fogDensityEnd: 0.2
+  fogMaterialOverride: {fileID: 0}
+  fogPropName: _FogIntens
   skyboxFogStart: 0
   skyboxFogEnd: 1
-  fogMaterial: {fileID: 2100000, guid: c874e277cada6e84191a204c931b0456, type: 2}
-  fogDensityProperty: _FogIntens
   transitionDuration: 2
 --- !u!4 &1519119124
 Transform:
