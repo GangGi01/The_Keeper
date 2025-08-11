@@ -69,11 +69,12 @@ float2 rayBoxDst(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 in
 
 float3 GetRay(float2 screenPos)
 {
-    float3 viewVector = mul(unity_CameraInvProjection, float4(screenPos * 2 - 1, 0, -1));
-    float3 viewDir = mul(unity_CameraToWorld, float4(viewVector, 0));
-    float viewLength = length(viewDir);
-    float3 ray = viewDir / viewLength;
-
+    // mul(...)는 float4를 돌려주므로 .xyz로 명시
+    float4 viewVector4 = mul(unity_CameraInvProjection, float4(screenPos * 2 - 1, 0, -1));
+    float3 viewVector  = viewVector4.xyz;
+    float3 viewDir     = mul(unity_CameraToWorld, float4(viewVector, 0)).xyz;
+    float  viewLength  = length(viewDir);
+    float3 ray         = viewDir / viewLength;
     return ray;
 }
 
@@ -91,9 +92,11 @@ SurfaceDescription SurfaceDescriptionFunction(SurfaceDescriptionInputs IN)
     float3 posBL = pos - bounds / 2;
     float3 posTR = pos + bounds / 2;
 
-    float3 viewVector = mul(unity_CameraInvProjection, float4(IN.ScreenPosition.xy * 2 - 1, 0, -1));
-    float3 viewDir = mul(unity_CameraToWorld, float4(viewVector, 0));
-    float viewLength = length(viewDir);
+    // 여기서도 mul(...) 결과를 .xyz로 명시
+    float4 viewVector4 = mul(unity_CameraInvProjection, float4(IN.ScreenPosition.xy * 2 - 1, 0, -1));
+    float3 viewVector  = viewVector4.xyz;
+    float3 viewDir     = mul(unity_CameraToWorld, float4(viewVector, 0)).xyz;
+    float  viewLength  = length(viewDir);
 
     float3 ray = GetRay(IN.ScreenPosition.xy);
 
@@ -110,7 +113,8 @@ SurfaceDescription SurfaceDescriptionFunction(SurfaceDescriptionInputs IN)
 
     if (distInBox == 0 || distToBox > depth)
     {
-        surface.BaseColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, IN.ScreenPosition.xy / IN.ScreenPosition.w);
+        // 텍스처 샘플은 float4 → .rgb로 명시
+        surface.BaseColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, IN.ScreenPosition.xy / IN.ScreenPosition.w).rgb;
         return surface;
     }
 
@@ -121,55 +125,56 @@ SurfaceDescription SurfaceDescriptionFunction(SurfaceDescriptionInputs IN)
     float stepSize = 0.5;
     int i = 0;
     UNITY_LOOP
-        for (i = 0; i < 250 && distTravelled + distToBox < depth && distTravelled < distInBox; i++)
+    for (i = 0; i < 250 && distTravelled + distToBox < depth && distTravelled < distInBox; i++)
+    {
+        float shadowAtten = 1;
+        float shadowAttenL = 1;
+        float shadowAttenR = 1;
+        float pointDensity;
+        float distMultiplier = 1;
+
+        float yPos = rayPos.y - pos.y;
+        yPos += bounds.y / 2;
+        yPos /= bounds.y;
+        float surfaceDist = pow(yPos, 200);
+        //surfaceDist = 0;
+        yPos = 1 - yPos;
+        yPos = pow(yPos, 50);
+
+        float noiseValue = Cellular(rayPos.xz * 0.2, (_Time * 50));
+        pointDensity = clamp((density * (1 - noiseValue)) + (yPos + surfaceDist), 0, 1);
+        cumulativeDensity += pointDensity * stepSize;
+        cumulativeDensityNoNoise += 0.2 * stepSize;
+        lighting += 0.05 * (1 - noiseValue);
+
+        if (1 - exp(-cumulativeDensity) > 1)
         {
-            float shadowAtten = 1;
-            float shadowAttenL = 1;
-            float shadowAttenR = 1;
-            float pointDensity;
-            float distMultiplier = 1;
-
-            float yPos = rayPos.y - pos.y;
-            yPos += bounds.y / 2;
-            yPos /= bounds.y;
-            float surfaceDist = pow(yPos, 200);
-            //surfaceDist = 0;
-            yPos = 1 - yPos;
-            yPos = pow(yPos, 50);
-
-            float noiseValue = Cellular(rayPos.xz * 0.2, (_Time * 50));
-            pointDensity = clamp((density * (1 - noiseValue)) + (yPos + surfaceDist), 0, 1);
-            cumulativeDensity += pointDensity * stepSize;
-            cumulativeDensityNoNoise += 0.2 * stepSize;
-            lighting += 0.05 * (1 - noiseValue);
-
-            if (1 - exp(-cumulativeDensity) > 1)
-            {
-                break;
-            }
-
-            float jitter = 0.9;
-            float randOffset = (random3D(rayPos) * (2 * (1 - jitter))) + (jitter);
-
-            distTravelled += stepSize * randOffset;
-
-            rayPos += ray * stepSize * randOffset;
-
-            if (distTravelled > 70)
-            {
-                stepSize += 10 * distMultiplier;
-                distMultiplier += 5;
-            }
+            break;
         }
 
-    float totalDensity = exp(-cumulativeDensity);
+        float jitter = 0.9;
+        float randOffset = (random3D(rayPos) * (2 * (1 - jitter))) + (jitter);
+
+        distTravelled += stepSize * randOffset;
+
+        rayPos += ray * stepSize * randOffset;
+
+        if (distTravelled > 70)
+        {
+            stepSize += 10 * distMultiplier;
+            distMultiplier += 5;
+        }
+    }
+
+    float totalDensity        = exp(-cumulativeDensity);
     float totalDensityNoNoise = 1 - exp(-cumulativeDensityNoNoise);
-    float totalLighting = pow(exp(-lighting), 0.5);
+    float totalLighting       = pow(exp(-lighting), 0.5);
 
     float2 refraction = sin(totalDensity) * 0.1;
-    float3 background = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, (IN.ScreenPosition.xy / IN.ScreenPosition.w) + refraction);
+    // 샘플 결과 .rgb 명시
+    float3 background = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, (IN.ScreenPosition.xy / IN.ScreenPosition.w) + refraction).rgb;
 
-    surface.BaseColor = lerp(background * ((totalLighting * 1) + 0.1), Albedo * (totalLighting + 0.8), (((1 - totalDensity) * (1 - density)) + density) * totalDensityNoNoise);
+    surface.BaseColor = lerp(background * ((totalLighting * 1) + 0.1), Albedo.rgb * (totalLighting + 0.8), (((1 - totalDensity) * (1 - density)) + density) * totalDensityNoNoise);
     return surface;
 }
 #endif

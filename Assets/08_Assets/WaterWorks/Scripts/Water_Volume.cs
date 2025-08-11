@@ -6,89 +6,91 @@ public class Water_Volume : ScriptableRendererFeature
 {
     class CustomRenderPass : ScriptableRenderPass
     {
-        public RenderTargetIdentifier source;
+        public RTHandle source;                 // ✅ RTHandle로 변경
 
         private Material _material;
 
-        private RenderTargetHandle tempRenderTarget;
-        private RenderTargetHandle tempRenderTarget2;
+        private RTHandle tempRenderTarget;      // ✅ RTHandle
+        private RTHandle tempRenderTarget2;     // (필요시 사용)
 
         public CustomRenderPass(Material mat)
         {
             _material = mat;
-
-            tempRenderTarget.Init("_TemporaryColourTexture");
-            tempRenderTarget2.Init("_TemporaryDepthTexture");
         }
 
-        // This method is called before executing the render pass.
-        // It can be used to configure render targets and their clear state. Also to create temporary render target textures.
-        // When empty this render pass will render to the active camera render target.
-        // You should never call CommandBuffer.SetRenderTarget. Instead call <c>ConfigureTarget</c> and <c>ConfigureClear</c>.
-        // The render pipeline will ensure target setup and clearing happens in an performance manner.
-        public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
-        {
-
-        }
-
-        // Here you can implement the rendering logic.
-        // Use <c>ScriptableRenderContext</c> to issue drawing commands or execute command buffers
-        // https://docs.unity3d.com/ScriptReference/Rendering.ScriptableRenderContext.html
-        // You don't have to call ScriptableRenderContext.submit, the render pipeline will call it at specific points in the pipeline.
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            if(renderingData.cameraData.cameraType != CameraType.Reflection)
-            {
-                CommandBuffer commandBuffer = CommandBufferPool.Get();
+            if (renderingData.cameraData.cameraType == CameraType.Reflection)
+                return;
 
-                commandBuffer.GetTemporaryRT(tempRenderTarget.id, renderingData.cameraData.cameraTargetDescriptor);
-                Blit(commandBuffer, source, tempRenderTarget.Identifier(), _material);
-                Blit(commandBuffer, tempRenderTarget.Identifier(), source);
+            var cmd = CommandBufferPool.Get(nameof(Water_Volume));
 
-                context.ExecuteCommandBuffer(commandBuffer);
-                CommandBufferPool.Release(commandBuffer);
-            }
+            // 카메라 타겟과 동일 스펙으로 임시 RT 확보
+            var desc = renderingData.cameraData.cameraTargetDescriptor;
+            desc.depthBufferBits = 0;
+
+            RenderingUtils.ReAllocateIfNeeded(
+                ref tempRenderTarget, desc,
+                FilterMode.Bilinear, TextureWrapMode.Clamp,
+                name: "_TemporaryColourTexture"
+            );
+
+            // 필요하다면 depth용도 동일하게
+            // RenderingUtils.ReAllocateIfNeeded(ref tempRenderTarget2, desc, ... , name: "_TemporaryDepthTexture");
+
+            // ✅ URP 권장 블릿 방식
+            Blitter.BlitCameraTexture(cmd, source, tempRenderTarget, _material, 0);
+            Blitter.BlitCameraTexture(cmd, tempRenderTarget, source);
+
+            context.ExecuteCommandBuffer(cmd);
+            CommandBufferPool.Release(cmd);
         }
 
-        /// Cleanup any allocated resources that were created during the execution of this render pass.
-        public override void FrameCleanup(CommandBuffer cmd)
+        // RTHandle은 카메라 종료시 릴리즈
+        public override void OnCameraCleanup(CommandBuffer cmd)
         {
+            if (tempRenderTarget != null)
+            {
+                tempRenderTarget.Release();
+                tempRenderTarget = null;
+            }
+            if (tempRenderTarget2 != null)
+            {
+                tempRenderTarget2.Release();
+                tempRenderTarget2 = null;
+            }
         }
     }
 
     [System.Serializable]
     public class _Settings
     {
-        //[HideInInspector]
         public Material material = null;
         public RenderPassEvent renderPass = RenderPassEvent.AfterRenderingSkybox;
     }
 
     public _Settings settings = new _Settings();
-
     CustomRenderPass m_ScriptablePass;
 
     public override void Create()
     {
-        if(settings.material == null)
-        {
+        if (settings.material == null)
             settings.material = (Material)Resources.Load("Water_Volume");
-        }
 
         m_ScriptablePass = new CustomRenderPass(settings.material);
-
-        // Configures where the render pass should be injected.
-        //m_ScriptablePass.renderPassEvent = RenderPassEvent.AfterRenderingOpaques;
         m_ScriptablePass.renderPassEvent = settings.renderPass;
     }
 
-    // Here you can inject one or multiple render passes in the renderer.
-    // This method is called when setting up the renderer once per-camera.
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
-    {       
-        m_ScriptablePass.source = renderer.cameraColorTarget;
+    {
+        // ✅ URP 12+ : cameraColorTargetHandle 사용
+#if UNITY_2021_2_OR_NEWER
+        m_ScriptablePass.source = renderer.cameraColorTargetHandle;
+#else
+        // 구(舊) URP 호환 (필요시)
+        m_ScriptablePass.source = RTHandles.Alloc(renderer.cameraColorTarget, name: "_CameraColorTargetCompat");
+#endif
+
         renderer.EnqueuePass(m_ScriptablePass);
     }
 }
-
-

@@ -6,6 +6,13 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/01_Scenes/01_MainMenuScene.unity
+    guid: f41982c6d222197468eb31b95c41bcd4
+  - enabled: 1
     path: Assets/01_Scenes/02_Hyunseok_Scenes.unity
     guid: 99c9720ab356a0642a771bea13969a05
-  m_configObjects: {}
+  m_configObjects:
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 5736a7b6926e7ec4f80c521f899aa75d,
+      type: 2}
+    com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 31ac4a4c083982643a8d74fbe09f344f,
+      type: 2}
